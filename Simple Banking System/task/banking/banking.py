@@ -10,6 +10,7 @@ class CardSystem:
         self.user_card = None
         self.user_pin = None
         self.login_input = None
+        self.checksum = None
 
     def run_menu(self):
         print('1. Create an account\n2. Log into account\n0. Exit')
@@ -27,16 +28,31 @@ class CardSystem:
             self.run_menu()
 
     def _generate_card_num(self):
+        # Generate a card number along with a PIN and create a dictionary entry to link the two
         account = str(random.randint(0, 999999999)).zfill(9)
-        suffix = str(random.randint(0, 9))
         personal_id = str(random.randint(0, 9999)).zfill(4)
-        card_num = "400000" + account + suffix
+        card_num = "400000" + account
+        self.check_sum(card_num)
+        card_num += self.checksum
         self.card_dict[card_num] = personal_id
         print("\nYour card has been created")
         print(f"Your card number:\n{card_num}")
         print(f"Your card PIN:\n{personal_id}\n")
 
+    def check_sum(self, number):
+        # perform the Luhn algorithm to determine the final digit of a card number
+        num_list = [int(number[i]) for i in range(len(number))]
+        num_list = [num_list[i] * 2 if i % 2 == 0 else num_list[i] for i in range(len(num_list))]
+        num_list = [num_list[i] - 9 if num_list[i] > 9 else num_list[i] for i in range(len(num_list))]
+        num_list = sum(num_list)
+        if num_list % 10 == 0:
+            self.checksum = '0'
+        else:
+            total = num_list % 10
+            self.checksum = str(10 - total)
+
     def login(self):
+        # path to the login menu
         self.user_card = input("\nEnter your card number:\n")
         self.user_pin = input("Enter your PIN:\n")
         if self.user_card in self.card_dict and self.card_dict[self.user_card] == self.user_pin:
