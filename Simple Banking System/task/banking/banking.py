@@ -14,8 +14,9 @@ class CardSystem:
         self.checksum = None
         self.card_num = None
         self.personal_id = None
-        self.login_bool = None
         self.balance = None
+        self.transfer_account = None
+        self.transfer_account_num = None
         self.id = 1
         self.conn = sqlite3.connect('card.s3db')
         self.cur = self.conn.cursor()
@@ -66,22 +67,30 @@ class CardSystem:
         # path to the login menu
         self.user_card = input("\nEnter your card number:\n")
         self.user_pin = input("Enter your PIN:\n")
-        self.login_bool = self.check_login()
-        if self.login_bool:
-            print("\nYou have successfully logged in!")
+        login_bool = self.check_login()
+        if login_bool:
+            print("\nYou have successfully logged in!\n")
             self.login_menu()
         else:
             print("\nWrong card number or PIN!\n")
             self.run_menu()
 
     def login_menu(self):
-        print("1. Balance\n2. Log out\n0. Exit")
+        print("1. Balance\n2. Add income\n3. Do transfer\n4. Close account\n5. Log out\n0. Exit")
         self.login_input = input()
         if self.login_input == '1':
-            print(f"\nBalance: {self.balance}\n\n")
+            print(f"\nBalance: {self.balance}\n")
             self.login_menu()
         elif self.login_input == "2":
-            print("\n")
+            self.add_income()
+            self.login_menu()
+        elif self.login_input == '3':
+            self.transfer()
+            self.login_menu()
+        elif self.login_input == '4':
+            self.close_acct()
+        elif self.login_input == '5':
+            print('\n')
             self.run_menu()
         elif self.login_input == "0":
             print("\nBye!")
@@ -90,7 +99,7 @@ class CardSystem:
 
     def create_table(self):
         self.cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='card';")
-        check_tbl = self.cur.fetchall()
+        check_tbl = self.cur.fetchone()
         if check_tbl:  # check to see if the table 'card' exists, if it does, pick up the count of the id number
             self.cur.execute('SELECT id FROM card;')
             id_list = [v for v in self.cur.fetchall()]
@@ -100,7 +109,8 @@ class CardSystem:
             else:
                 self.id = self.id
         else:  # if table 'card' doesn't exist, create it
-            self.cur.execute('CREATE TABLE IF NOT EXISTS card (id INTEGER DEFAULT 0, number TEXT, pin TEXT, balance INTEGER DEFAULT 0);')
+            self.cur.execute('''CREATE TABLE IF NOT EXISTS card (
+                             id INTEGER DEFAULT 0, number TEXT, pin TEXT, balance INTEGER DEFAULT 0);''')
             self.conn.commit()
 
     def insert_info(self):
@@ -110,15 +120,82 @@ class CardSystem:
         self.id += 1
 
     def check_login(self):
-        x = (self.user_card,)
-        self.cur.execute('SELECT pin, balance FROM card WHERE number=?', x)
+        self.cur.execute('SELECT pin, balance FROM card WHERE number=?', (self.user_card,))
         table_info = self.cur.fetchone()
         if table_info:
-            if self.user_pin == table_info[0]:
+            if self.user_pin == str(table_info[0]):
                 self.balance = table_info[1]
                 return True
             return False
         return False
+
+    def add_income(self):
+        print("Enter income:")
+        add_income = int(input())
+        print("Income was added!\n")
+        self.balance += add_income
+        self.update_balance()
+
+    def update_balance(self):
+        up_bal = (self.balance, self.user_card, self.user_pin)
+        self.cur.execute('UPDATE card SET balance=? WHERE number=? AND pin=?', up_bal)
+        self.conn.commit()
+
+    def transfer(self):
+        print("\nTransfer")
+        self.transfer_account_num = input("Enter card number:\n")
+        if self.user_card == self.transfer_account_num:
+            print("You can't transfer money to the same account!\n")
+            self.login_menu()
+        luhn_bool = self.luhn_check(self.transfer_account_num)
+        if luhn_bool:
+            trans_bool = self.check_account()
+            if trans_bool:
+                self.trans_money()
+                print('Success!\n')
+                self.login_menu()
+            else:
+                print('Such a card does not exist.\n')
+                self.login_menu()
+        else:
+            print("Probably you made mistake in the card number.\nPlease try again!\n")
+            self.login_menu()
+
+    def check_account(self):
+        self.cur.execute('SELECT * FROM card WHERE number=?', (self.transfer_account_num,))
+        check_acct = self.cur.fetchone()
+        if check_acct:
+            return True
+        else:
+            return False
+
+    def trans_money(self):
+        trans_amount = int(input("Enter how much money you want to transfer:\n"))
+        if trans_amount > self.balance:
+            print('Not enough money!\n')
+            self.login_menu()
+        else:
+            self.balance -= trans_amount
+            self.cur.execute('UPDATE card SET balance=? WHERE number=?;', (self.balance, self.user_card))
+            self.cur.execute('SELECT balance FROM card WHERE number=?;', (self.transfer_account_num,))
+            new_bal = self.cur.fetchone()
+            new_bal = new_bal[0] + trans_amount
+            self.cur.execute('UPDATE card SET balance=? WHERE number=?;', (new_bal, self.transfer_account_num))
+            self.conn.commit()
+
+    def close_acct(self):
+        self.cur.execute('DELETE FROM card WHERE number=? AND pin=?', (self.user_card, self.user_pin))
+        self.conn.commit()
+        print('The account has been closed!\n')
+        self.run_menu()
+
+    @staticmethod
+    def luhn_check(number):
+        num_list = [int(number[i]) for i in range(len(number))]
+        num_list = [num_list[i] * 2 if i % 2 == 0 else num_list[i] for i in range(len(num_list))]
+        num_list = [num_list[i] - 9 if num_list[i] > 9 else num_list[i] for i in range(len(num_list))]
+        num_list = sum(num_list)
+        return num_list % 10 == 0
 
 
 random.seed()
